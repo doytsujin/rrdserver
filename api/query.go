@@ -141,7 +141,6 @@ func (vals QueryResponseValues) MarshalJSON() ([]byte, error) {
 		}
 	}
 	res += "}"
-	fmt.Printf("%v", res)
 	return []byte(res), nil
 }
 
