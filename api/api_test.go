@@ -64,11 +64,7 @@ func NewTestRRD(test *testing.T) (res *TestRRD, ok bool) {
 			return res, false
 		}
 
-		args := make([]string, 4)
-		args[0] = "create"
-		args[1] = file
-		args[2] = "--step"
-		args[3] = "60"
+		args := []string{"create", file, "--start", "943920000", "--step", "60"}
 		args = append(args, q.args...)
 
 		cmd := exec.Command("rrdtool", args...)
@@ -103,7 +99,7 @@ func (r TestRRD) InsertValues(File string, Time string, Values ...float64) {
 		r.Fatal(fmt.Sprintf("%v", err))
 	}
 
-	counts := fmt.Sprintf("%v", t.Unix())
+	counts := fmt.Sprintf("%v", uint64(t.Unix()))
 	for _, v := range Values {
 		counts += fmt.Sprintf(":%f", v)
 	}

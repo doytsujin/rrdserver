@@ -53,26 +53,26 @@ func TestQuery(test *testing.T) {
 		return
 	}
 	//                                                                                   rx   tx
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 00:59:00", 100, 300)
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 01:00:00", 100, 320)
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 01:01:00", 110, 320)
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 01:02:00", 120, 340)
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 01:03:00", 130, 360)
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 01:04:00", 140, 380)
-	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2100.01.02 01:05:00", 150, 400)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 00:59:00", 100, 300)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:00:00", 100, 320)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:01:00", 110, 320)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:02:00", 120, 340)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:03:00", 130, 360)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:04:00", 140, 380)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:05:00", 150, 400)
 
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 00:59:00", 0)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:00:00", 0)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:01:00", 1)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:02:00", 2)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:03:00", 3)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:04:00", 4)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:05:00", 5)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:06:00", 6)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:07:00", 7)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:08:00", 8)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:09:00", 9)
-	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2100.01.02 01:10:00", 10)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 00:59:00", 0)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:00:00", 0)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:01:00", 1)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:02:00", 2)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:03:00", 3)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:04:00", 4)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:05:00", 5)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:06:00", 6)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:07:00", 7)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:08:00", 8)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:09:00", 9)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:10:00", 10)
 
 	api := NewAPI(rrd.Directory)
 
@@ -83,71 +83,71 @@ func TestQuery(test *testing.T) {
 	}{
 		{`[
 		{"metric": "server1.net/interface-eth0/if_packets/rx",
-				"start":  		"2100.01.02 00:59:59",
-				"end":    		"2100.01.02 01:05:00",
+				"start":  		"2000.01.02 00:59:59",
+				"end":    		"2000.01.02 01:05:00",
 				"consolidation":"AVERAGE",
 				"resolution":   "1s"}
 		]`,
 			`
-		2100.01.02-01:00:00  100
-        2100.01.02-01:01:00  110
-        2100.01.02-01:02:00  120
-        2100.01.02-01:03:00  130
-        2100.01.02-01:04:00  140
-        2100.01.02-01:05:00  150
+		2000.01.02-01:00:00  100
+        2000.01.02-01:01:00  110
+        2000.01.02-01:02:00  120
+        2000.01.02-01:03:00  130
+        2000.01.02-01:04:00  140
+        2000.01.02-01:05:00  150
         `},
 
 		{`[
 		{"metric": "server1.net/interface-eth0/if_packets/rx",
-				"start":  		"2100.01.02 00:59:59",
-				"end":    		"2100.01.02 01:05:00",
+				"start":  		"2000.01.02 00:59:59",
+				"end":    		"2000.01.02 01:05:00",
 				"consolidation":"AVERAGE",
 				"resolution":   "1s"},
 		{"metric": "server1.net/interface-eth0/if_packets/tx",
-				"start":  		"2100.01.02 00:59:59",
-				"end":    		"2100.01.02 01:05:00",
+				"start":  		"2000.01.02 00:59:59",
+				"end":    		"2000.01.02 01:05:00",
 				"consolidation":"AVERAGE",
 				"resolution":   "1s"}
 		]`,
 			`
-		2100.01.02-01:00:00  100 320
-        2100.01.02-01:01:00  110 320
-        2100.01.02-01:02:00  120 340
-        2100.01.02-01:03:00  130 360
-        2100.01.02-01:04:00  140 380
-        2100.01.02-01:05:00  150 400
+		2000.01.02-01:00:00  100 320
+        2000.01.02-01:01:00  110 320
+        2000.01.02-01:02:00  120 340
+        2000.01.02-01:03:00  130 360
+        2000.01.02-01:04:00  140 380
+        2000.01.02-01:05:00  150 400
         `},
 
 		{`[
 		{"metric": "server1.net/cpu-0/cpu-system/value",
-				"start":  		"2100.01.02 00:59:59",
-				"end":    		"2100.01.02 01:05:00",
+				"start":  		"2000.01.02 00:59:59",
+				"end":    		"2000.01.02 01:05:00",
 				"consolidation":"AVERAGE",
 				"resolution":   "1s"}
 		]`,
 			`
-        2100.01.02-01:00:00		0
-        2100.01.02-01:01:00		1
-        2100.01.02-01:02:00		2
-        2100.01.02-01:03:00		3
-        2100.01.02-01:04:00		4
-        2100.01.02-01:05:00		5
+        2000.01.02-01:00:00		0
+        2000.01.02-01:01:00		1
+        2000.01.02-01:02:00		2
+        2000.01.02-01:03:00		3
+        2000.01.02-01:04:00		4
+        2000.01.02-01:05:00		5
         `},
 
 		{`[
 		{"metric": "server1.net/cpu-0/cpu-system",
-				"start":  		"2100.01.02 00:59:59",
-				"end":    		"2100.01.02 01:05:00",
+				"start":  		"2000.01.02 00:59:59",
+				"end":    		"2000.01.02 01:05:00",
 				"consolidation":"AVERAGE",
 				"resolution":   "1s"}
 		]`,
 			`
-        2100.01.02-01:00:00		0
-        2100.01.02-01:01:00		1
-        2100.01.02-01:02:00		2
-        2100.01.02-01:03:00		3
-        2100.01.02-01:04:00		4
-        2100.01.02-01:05:00		5
+        2000.01.02-01:00:00		0
+        2000.01.02-01:01:00		1
+        2000.01.02-01:02:00		2
+        2000.01.02-01:03:00		3
+        2000.01.02-01:04:00		4
+        2000.01.02-01:05:00		5
         `},
 	}
 
@@ -164,12 +164,12 @@ func TestQuery(test *testing.T) {
 
 		resp, err := api.query(req)
 		if err != nil {
-			test.Error(fmt.Sprintf("API.Query error: %v", err))
+			test.Error(fmt.Sprintf("Query: %s\n Error: %v", c.query, err))
 			continue
 		}
 
 		if len(resp) < 1 {
-			test.Error("API.Query empty result.")
+			test.Error(fmt.Sprintf("Query: %s\n Empty result.", c.query))
 			continue
 		}
 

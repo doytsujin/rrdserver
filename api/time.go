@@ -12,7 +12,7 @@ import (
 type Time time.Time
 
 func (t *Time) UnmarshalJSON(data []byte) error {
-	var n int
+	var n int64
 	if json.Unmarshal(data, &n) == nil {
 		tmp, err := TimeFromString(fmt.Sprintf("%v", n))
 		*t = Time(tmp)
@@ -40,7 +40,7 @@ func TimeFromString(str string) (time.Time, error) {
 	res = time.Now()
 
 	if d, err := time.ParseDuration(str); err != nil {
-		return time.Time{}, errors.New(fmt.Sprintf("Incorrect time string '%v'", str))
+		return time.Time{}, errors.New(fmt.Sprintf("Incorrect time string '%v': %s\n", str, err))
 	} else {
 		res = res.Add(d)
 	}
@@ -58,7 +58,7 @@ func parseAbsTime(s string) (time.Time, error) {
 	}
 
 	// Unix timestamp .................
-	n, err := strconv.ParseInt(s, 10, 0)
+	n, err := strconv.ParseInt(s, 10, 64)
 	if err == nil {
 		// Any integers with 13 (or 14) characters will be treated as a millisecond timestamp.
 		if n >= 1000000000000 {

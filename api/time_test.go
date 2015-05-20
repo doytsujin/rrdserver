@@ -11,7 +11,7 @@ func relTime(t time.Time, offset string) time.Time {
 	return t.Add(d)
 }
 
-func TestAPIStrToDateTime(test *testing.T) {
+func TestTimeFromString(test *testing.T) {
 	now := time.Now()
 	y := now.Year()
 	m := now.Month()
@@ -89,6 +89,53 @@ func TestAPIStrToDateTime(test *testing.T) {
 
 	for _, c := range cases {
 		t, err := TimeFromString(c.query)
+
+		if err != nil {
+			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
+		} else {
+			if c.delta != "" {
+				dur, _ := time.ParseDuration(c.delta)
+				t = t.Round(dur)
+				c.expected = c.expected.Round(dur)
+			}
+
+			if t.UnixNano() != c.expected.UnixNano() {
+				test.Error(fmt.Sprintf("Check failed for \"%s\":\n\t expected: %s   (%s),\n\t real:     %s   (%s)",
+					c.query,
+					c.expected.Local(), c.expected.UTC(),
+					t.Local(), t.UTC()))
+			}
+		}
+	}
+}
+
+func TestUnmarshalJSON(test *testing.T) {
+	now := time.Now()
+	tzLocal, _ := time.LoadLocation("Local")
+	tzUTC, _ := time.LoadLocation("UTC")
+
+	cases := []struct {
+		query    string
+		expected time.Time
+		delta    string
+	}{
+		{"1000000000", time.Date(2001, 9, 9, 1, 46, 40, 0, tzUTC), ""},
+		{"1430031094", time.Date(2015, 4, 26, 6, 51, 34, 0, tzUTC), ""},
+		{"9999999999", time.Date(2286, 11, 20, 17, 46, 39, 0, tzUTC), ""},
+		{"1000000000000", time.Date(2001, 9, 9, 1, 46, 40, 0, tzUTC), ""},
+		{"1000000000125", time.Date(2001, 9, 9, 1, 46, 40, 125, tzUTC), ""},
+		{"1430031094317", time.Date(2015, 4, 26, 6, 51, 34, 317, tzUTC), ""},
+		{"9999999999000", time.Date(2286, 11, 20, 17, 46, 39, 0, tzUTC), ""},
+		{"9999999999999", time.Date(2286, 11, 20, 17, 46, 39, 999, tzUTC), ""},
+
+		{`"now"`, now, "1s"},
+		{`"2006.05.04 03:02:01"`, time.Date(2006, 5, 4, 3, 2, 1, 0, tzLocal), ""},
+	}
+
+	for _, c := range cases {
+		v := Time{}
+		err := (&v).UnmarshalJSON([]byte(c.query))
+		t := time.Time(v)
 
 		if err != nil {
 			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
