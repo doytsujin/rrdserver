@@ -125,8 +125,3 @@ func comparePaths(s1, s2 []string) bool {
 	sort.Strings(s2)
 	return fmt.Sprintf("%+v", s1) == fmt.Sprintf("%+v", s2)
 }
-
-func isFile(file string) bool {
-	fileInfo, err := os.Stat(file)
-	return err == nil && !fileInfo.IsDir()
-}
