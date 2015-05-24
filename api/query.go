@@ -76,7 +76,7 @@ func (req *QueryRequest) FromForm(form url.Values) (err error) {
 	return req.Check()
 }
 
-func (req QueryRequest) Check() error {
+func (req *QueryRequest) Check() error {
 	if time.Time(req.Start).IsZero() {
 		return errors.New("Missing parameter 'start' in the request.")
 	}
@@ -201,7 +201,16 @@ func (api *API) query(queryReq QueryRequest) ([]QueryResponse, error) {
 	if err := queryReq.Check(); err != nil {
 		return nil, err
 	}
-
+	/*
+	fmt.Printf("Request =====================\n")
+	fmt.Printf("  Start: %v\n", time.Time(queryReq.Start))
+	fmt.Printf("  End:   %v\n", time.Time(queryReq.End))
+	fmt.Printf("  Resolution: %v\n", time.Duration(queryReq.Resolution).Seconds())
+	for _, q := range queryReq.Queries {
+		fmt.Printf("    - Metric: %v\t%v\n", q.Metric, q.Consolidation.String())
+	}
+	fmt.Printf("=============================\n")
+	*/
 	type Job struct {
 		metric string
 		cons   Consolidation
