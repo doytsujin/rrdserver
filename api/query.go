@@ -93,6 +93,10 @@ func (req *QueryRequest) Check() error {
 		req.Resolution = Duration(time.Second)
 	}
 
+	if len(req.Queries) == 0 {
+		return errors.New("Missing parameter 'metric' in the request.")
+	}
+
 	for _, q := range req.Queries {
 		if q.Metric == "" {
 			return errors.New("Missing parameter 'metric' in the request.")
@@ -165,11 +169,13 @@ func (api API) QueryPostHandler(w http.ResponseWriter, r *http.Request) {
 	res, err := api.query(req)
 	if err != nil {
 		InternalServerError(w, "%v", err)
+		return
 	}
 
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
 		InternalServerError(w, "%v", err)
+		return
 	}
 }
 
@@ -189,11 +195,13 @@ func (api API) QueryGetHandler(w http.ResponseWriter, r *http.Request) {
 	res, err := api.query(req)
 	if err != nil {
 		InternalServerError(w, "%v", err)
+		return
 	}
 
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
 		InternalServerError(w, "%v", err)
+		return
 	}
 }
 
