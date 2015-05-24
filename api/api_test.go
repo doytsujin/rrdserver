@@ -8,22 +8,20 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"testing"
 	"time"
 )
 
 type TestRRD struct {
 	Directory string
-	Test      *testing.T
 }
 
-func NewTestRRD(test *testing.T) (res *TestRRD, ok bool) {
-	res = &TestRRD{Test: test}
+func NewTestRRD() (res *TestRRD, ok bool) {
+	res = &TestRRD{}
 
 	if dir, err := ioutil.TempDir("", "rrdserver"); err == nil {
 		res.Directory = dir + "/"
 	} else {
-		test.Error(err)
+		log.Fatal(fmt.Sprintf("Can't create temporary directory: %v\n", err))
 		return res, false
 	}
 
@@ -60,7 +58,7 @@ func NewTestRRD(test *testing.T) (res *TestRRD, ok bool) {
 
 		if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
 			res.Clean()
-			test.Error(fmt.Sprintf("Can't create directory '%v' for RRD file: %v\n", filepath.Dir(file), err))
+			log.Fatal(fmt.Sprintf("Can't create directory '%v' for RRD file: %v\n", filepath.Dir(file), err))
 			return res, false
 		}
 
@@ -71,7 +69,7 @@ func NewTestRRD(test *testing.T) (res *TestRRD, ok bool) {
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			res.Clean()
-			test.Error(fmt.Sprintf("Can't create RRD file '%s':\n%s", file, out))
+			log.Fatal(fmt.Sprintf("Can't create RRD file '%s':\n%s", file, out))
 			return res, false
 		}
 	}

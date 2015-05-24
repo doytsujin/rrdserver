@@ -11,25 +11,32 @@ import (
 
 type Time time.Time
 
+func (t Time) Unix() int64 {
+	return time.Time(t).Unix()
+}
+
 func (t *Time) UnmarshalJSON(data []byte) error {
+	var err error
 	var n int64
 	if json.Unmarshal(data, &n) == nil {
-		tmp, err := TimeFromString(fmt.Sprintf("%v", n))
-		*t = Time(tmp)
+		*t, err = TimeFromString(fmt.Sprintf("%v", n))
 		return err
 	}
 
 	var s string
 	if json.Unmarshal(data, &s) == nil {
-		tmp, err := TimeFromString(s)
-		*t = Time(tmp)
+		*t, err = TimeFromString(s)
 		return err
 	}
 
 	return errors.New(fmt.Sprintf("Incorrect time string '%v'", data))
 }
 
-func TimeFromString(str string) (time.Time, error) {
+func (t *Time) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%v"`, time.Time(*t).Unix())), nil
+}
+
+func TimeFromString(str string) (Time, error) {
 	str = strings.Trim(str, " \t\n")
 
 	res, err := parseAbsTime(str)
@@ -37,24 +44,24 @@ func TimeFromString(str string) (time.Time, error) {
 		return res, nil
 	}
 
-	res = time.Now()
+	res = Time(time.Now())
 
 	if d, err := time.ParseDuration(str); err != nil {
-		return time.Time{}, errors.New(fmt.Sprintf("Incorrect time string '%v': %s\n", str, err))
+		return Time{}, errors.New(fmt.Sprintf("Incorrect time string '%v': %s\n", str, err))
 	} else {
-		res = res.Add(d)
+		res = Time(time.Time(res).Add(d))
 	}
 
 	return res, nil
 }
 
-func parseAbsTime(s string) (time.Time, error) {
+func parseAbsTime(s string) (Time, error) {
 	tz, _ := time.LoadLocation("Local")
 
 	// Literals .......................
 	if s == "" ||
 		strings.ToUpper(s) == "NOW" {
-		return time.Now(), nil
+		return Time(time.Now()), nil
 	}
 
 	// Unix timestamp .................
@@ -62,12 +69,12 @@ func parseAbsTime(s string) (time.Time, error) {
 	if err == nil {
 		// Any integers with 13 (or 14) characters will be treated as a millisecond timestamp.
 		if n >= 1000000000000 {
-			return time.Unix(n/1000, n%1000), nil
+			return Time(time.Unix(n/1000, n%1000)), nil
 		}
 
-		// Anything 10 characters or less represent seconds.
-		if n >= 1000000000 {
-			return time.Unix(n, 0), nil
+		// Anything 9 characters or less represent seconds.
+		if n >= 100000000 {
+			return Time(time.Unix(n, 0)), nil
 		}
 	}
 
@@ -115,7 +122,7 @@ func parseAbsTime(s string) (time.Time, error) {
 	for _, l := range dLayouts {
 		res, err := time.ParseInLocation(l, s, tz)
 		if err == nil {
-			return res, nil
+			return Time(res), nil
 		}
 	}
 
@@ -129,26 +136,27 @@ func parseAbsTime(s string) (time.Time, error) {
 		res, err := time.ParseInLocation(l, s, tz)
 		if err == nil {
 			now := time.Now()
-			return res.AddDate(now.Year(), int(now.Month()-1), now.Day()-1), nil
+			return Time(time.Time(res).AddDate(now.Year(), int(now.Month()-1), now.Day()-1)), nil
 		}
 	}
 
-	return time.Time{}, errors.New(fmt.Sprintf("Incorrect date string '%v'", s))
+	return Time{}, errors.New(fmt.Sprintf("Incorrect date string '%v'", s))
 }
 
 type Duration time.Duration
 
-func DurationFromString(s string) (time.Duration, error) {
+func DurationFromString(s string) (Duration, error) {
 	if s == "" {
-		return time.Second, nil
+		return Duration(time.Second), nil
 	}
 
 	n, err := strconv.ParseInt(s, 10, 0)
 	if err == nil {
-		return time.Duration(n * int64(time.Second)), nil
+		return Duration(n * int64(time.Second)), nil
 	}
 
-	return time.ParseDuration(s)
+	res, err := time.ParseDuration(s)
+	return Duration(res), err
 }
 
 func (d *Duration) UnmarshalJSON(data []byte) error {
@@ -166,4 +174,8 @@ func (d *Duration) UnmarshalJSON(data []byte) error {
 	}
 
 	return errors.New(fmt.Sprintf("Invalid duration string '%v'", data))
+}
+
+func (d *Duration) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`%v`, time.Duration(*d).Seconds())), nil
 }

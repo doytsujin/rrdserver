@@ -13,21 +13,27 @@ import (
 	"time"
 )
 
-type QueryRequest struct {
-	Start         time.Time     `json:"start"`
-	End           time.Time     `json:"end"`
+type MetricInfo struct {
 	Metric        string        `json:"metric"`
 	Consolidation Consolidation `json:"consolidation"`
-	Resolution    time.Duration `json:"resolution"`
-	file          string
-	ds            string
 }
 
-type QueryResponseValues map[time.Time]float64
+type QueryRequest struct {
+	Start      Time         `json:"start"`
+	End        Time         `json:"end"`
+	Resolution Duration     `json:"resolution"`
+	Queries    []MetricInfo `json:"queries"`
+}
+
+type QueryResponseValues map[Time]float64
 
 type QueryResponse struct {
-	Query  QueryRequest        `json:"query"`
-	Values QueryResponseValues `json:"result"`
+	Start         Time                `json:"start"`
+	End           Time                `json:"end"`
+	Resolution    Duration            `json:"resolution"`
+	Metric        string              `json:"metric"`
+	Consolidation Consolidation       `json:"consolidation"`
+	Values        QueryResponseValues `json:"result"`
 }
 
 func (req *QueryRequest) FromForm(form url.Values) (err error) {
@@ -45,17 +51,6 @@ func (req *QueryRequest) FromForm(form url.Values) (err error) {
 		}
 	}
 
-	if v, ok := form["metric"]; ok {
-		req.Metric = SafeMetric(v[0])
-	}
-
-	if v, ok := form["consolidation"]; ok {
-		req.Consolidation, err = ConsolidationFromString(v[0])
-		if err != nil {
-			return
-		}
-	}
-
 	if v, ok := form["resolution"]; ok {
 		req.Resolution, err = DurationFromString(v[0])
 		if err != nil {
@@ -63,72 +58,55 @@ func (req *QueryRequest) FromForm(form url.Values) (err error) {
 		}
 	}
 
-	return req.Check()
-}
+	metrics, _ := form["metric"]
+	cons, _ := form["consolidation"]
 
-func (req *QueryRequest) UnmarshalJSON(data []byte) error {
-	var tmp struct {
-		Start         Time          `json:"start"`
-		End           Time          `json:"end"`
-		Metric        string        `json:"metric"`
-		Consolidation Consolidation `json:"consolidation"`
-		Resolution    Duration      `json:"resolution"`
+	for i, m := range metrics {
+		mi := MetricInfo{Metric: m}
+		if i < len(cons) {
+			mi.Consolidation, err = ConsolidationFromString(cons[i])
+			if err != nil {
+				return
+			}
+		}
+
+		req.Queries = append(req.Queries, mi)
 	}
-
-	err := json.Unmarshal(data, &tmp)
-	if err != nil {
-		return err
-	}
-
-	req.Start = time.Time(tmp.Start)
-	req.End = time.Time(tmp.End)
-	req.Metric = SafeMetric(tmp.Metric)
-	req.Consolidation = tmp.Consolidation
-	req.Resolution = time.Duration(tmp.Resolution)
 
 	return req.Check()
 }
 
-func (req *QueryRequest) Check() error {
-	if req.Metric == "" {
-		return errors.New("Missing parameter 'metric' in the request.")
-	}
-
-	if req.Start.IsZero() {
+func (req QueryRequest) Check() error {
+	if time.Time(req.Start).IsZero() {
 		return errors.New("Missing parameter 'start' in the request.")
 	}
 
-	if req.End.IsZero() {
-		req.End = time.Now()
+	if time.Time(req.End).IsZero() {
+		req.End = Time(time.Now())
 	}
 
-	if req.End.Before(req.Start) {
+	if time.Time(req.End).Before(time.Time(req.Start)) {
 		return errors.New("Parameter 'end' should be grater then 'start'")
 	}
 
 	if req.Resolution == 0 {
-		req.Resolution = time.Second
+		req.Resolution = Duration(time.Second)
+	}
+
+	for _, q := range req.Queries {
+		if q.Metric == "" {
+			return errors.New("Missing parameter 'metric' in the request.")
+		}
 	}
 
 	return nil
-}
-
-func (req QueryRequest) MarshalJSON() ([]byte, error) {
-	metric, _ := json.Marshal(req.Metric)
-	res := "{"
-	res += fmt.Sprintf("\"start\": %v,\n", req.Start.Unix())
-	res += fmt.Sprintf("\"end\": %v,\n", req.End.Unix())
-	res += fmt.Sprintf("\"metric\": %s,\n", string(metric))
-	res += fmt.Sprintf("\"consolidation\": \"%s\",\n", req.Consolidation.String())
-	res += fmt.Sprintf("\"resolution\": %v\n", req.Resolution.Seconds())
-	res += "}"
-	return []byte(res), nil
 }
 
 func (vals QueryResponseValues) MarshalJSON() ([]byte, error) {
 	res := "{"
 	n := 0
 	for t, v := range vals {
+
 		if n > 0 {
 			res += ",\n"
 		}
@@ -144,8 +122,25 @@ func (vals QueryResponseValues) MarshalJSON() ([]byte, error) {
 	return []byte(res), nil
 }
 
-func NewQueryResponse(req QueryRequest, count int) QueryResponse {
-	return QueryResponse{req, make(QueryResponseValues, count)}
+func (vals *QueryResponseValues) UnmarshalJSON(data []byte) error {
+	var tmp map[string]float64
+
+	err := json.Unmarshal(data, &tmp)
+	if err != nil {
+		return err
+	}
+
+	vls := make(QueryResponseValues, len(tmp))
+	for k, v := range tmp {
+		t, err := TimeFromString(k)
+		if err != nil {
+			return err
+		}
+		vls[t] = v
+	}
+
+	*vals = vls
+	return nil
 }
 
 func isArray(data []byte) bool {
@@ -153,31 +148,18 @@ func isArray(data []byte) bool {
 	return json.Unmarshal(data, &v) == nil
 }
 
-func (api *API) QueryPostHandler(w http.ResponseWriter, r *http.Request) {
+func (api API) QueryPostHandler(w http.ResponseWriter, r *http.Request) {
 	api.CommonHeader(w, r)
 	body, err := ioutil.ReadAll(r.Body)
-
 	if err != nil {
 		BadRequest(w, "%v", err)
 		return
 	}
 
-	var req []*QueryRequest
-
-	if isArray(body) {
-
-		if err = json.Unmarshal(body, &req); err != nil {
-			BadRequest(w, "%v", err)
-			return
-		}
-
-	} else {
-		var r QueryRequest
-		if err = json.Unmarshal(body, &r); err != nil {
-			BadRequest(w, "%v", err)
-			return
-		}
-		req = []*QueryRequest{&r}
+	req := QueryRequest{}
+	if err = json.Unmarshal(body, &req); err != nil {
+		BadRequest(w, "%v", err)
+		return
 	}
 
 	res, err := api.query(req)
@@ -191,7 +173,7 @@ func (api *API) QueryPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (api *API) QueryGetHandler(w http.ResponseWriter, r *http.Request) {
+func (api API) QueryGetHandler(w http.ResponseWriter, r *http.Request) {
 	api.CommonHeader(w, r)
 	if err := r.ParseForm(); err != nil {
 		BadRequest(w, "%v", err)
@@ -204,7 +186,7 @@ func (api *API) QueryGetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := api.query([]*QueryRequest{&req})
+	res, err := api.query(req)
 	if err != nil {
 		InternalServerError(w, "%v", err)
 	}
@@ -213,67 +195,82 @@ func (api *API) QueryGetHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		InternalServerError(w, "%v", err)
 	}
-
 }
 
-func (api *API) query(queryReq []*QueryRequest) ([]QueryResponse, error) {
-	for _, req := range queryReq {
-		err := req.Check()
-		if err != nil {
-			return nil, err
+func (api *API) query(queryReq QueryRequest) ([]QueryResponse, error) {
+	if err := queryReq.Check(); err != nil {
+		return nil, err
+	}
+
+	type Job struct {
+		metric string
+		cons   Consolidation
+		file   string
+		ds     string
+	}
+
+	jobs := []Job{}
+
+	for _, q := range queryReq.Queries {
+		job := Job{metric: q.Metric, cons: q.Consolidation}
+		if isFile(api.DataDir + q.Metric + ".rrd") {
+			job.file = api.DataDir + q.Metric + ".rrd"
+			job.ds = ""
+		} else if isFile(api.DataDir + filepath.Dir(q.Metric) + ".rrd") {
+			job.file = api.DataDir + filepath.Dir(q.Metric) + ".rrd"
+			job.ds = filepath.Base(q.Metric)
 		}
 
-		if isFile(api.DataDir + req.Metric + ".rrd") {
-			req.file = api.DataDir + req.Metric + ".rrd"
-			req.ds = ""
-		} else if isFile(api.DataDir + filepath.Dir(req.Metric) + ".rrd") {
-			req.file = api.DataDir + filepath.Dir(req.Metric) + ".rrd"
-			req.ds = filepath.Base(req.Metric)
+		if job.file == "" {
+			return nil, errors.New(fmt.Sprintf("Metric '%v' not exists", q.Metric))
 		}
 
-		if req.file == "" {
-			return nil, errors.New(fmt.Sprintf("Metric '%v' not exists", req.Metric))
-		}
+		jobs = append(jobs, job)
 	}
 
 	res := []QueryResponse{}
 	processed := map[int]bool{}
-	for i, base := range queryReq {
+	for i, job := range jobs {
 		if processed[i] {
 			continue
 		}
 
-		fetchRes, err := rrd.Fetch(base.file,
-			base.Consolidation.String(),
-			base.Start,
-			base.End,
-			base.Resolution)
+		fetchRes, err := rrd.Fetch(job.file,
+			job.cons.String(),
+			time.Time(queryReq.Start),
+			time.Time(queryReq.End),
+			time.Duration(queryReq.Resolution))
+
 		if err != nil {
 			return nil, err
 		}
 		defer fetchRes.FreeValues()
 
-		for j := i; j < len(queryReq); j++ {
-			if processed[j] {
+		for k := i; k < len(jobs); k++ {
+			if processed[k] {
 				continue
 			}
-			r := queryReq[j]
+			j := jobs[k]
 
-			if base.file == r.file &&
-				base.Consolidation == r.Consolidation &&
-				base.Start == r.Start &&
-				base.End == r.End &&
-				base.Resolution == r.Resolution {
-
-				processed[j] = true
-				idx := indexOf(fetchRes.DsNames, r.ds)
+			if job.file == j.file && job.cons == j.cons {
+				processed[k] = true
+				idx := indexOf(fetchRes.DsNames, j.ds)
 				if idx < 0 {
-					return nil, errors.New(fmt.Sprintf("ds '%v' not found in %v", r.ds, r.file))
+					return nil, errors.New(fmt.Sprintf("ds '%v' not found in %v", j.ds, j.file))
 				}
 
-				data := NewQueryResponse(*r, fetchRes.RowCnt)
-				for k, t := 0, fetchRes.Start.Add(fetchRes.Step); t.Before(r.End) || t.Equal(r.End); k, t = k+1, t.Add(fetchRes.Step) {
-					data.Values[t] = fetchRes.ValueAt(idx, k)
+				data := QueryResponse{
+					Start:         queryReq.Start,
+					End:           queryReq.End,
+					Resolution:    queryReq.Resolution,
+					Metric:        job.metric,
+					Consolidation: job.cons,
+					Values:        make(QueryResponseValues, fetchRes.RowCnt),
+				}
+
+				end := time.Time(queryReq.End)
+				for k, t := 0, fetchRes.Start.Add(fetchRes.Step); t.Before(end) || t.Equal(end); k, t = k+1, t.Add(fetchRes.Step) {
+					data.Values[Time(t)] = fetchRes.ValueAt(idx, k)
 				}
 				res = append(res, data)
 			}

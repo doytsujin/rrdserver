@@ -88,11 +88,11 @@ func TestTimeFromString(test *testing.T) {
 	}
 
 	for _, c := range cases {
-		t, err := TimeFromString(c.query)
-
+		tmp, err := TimeFromString(c.query)
 		if err != nil {
 			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
 		} else {
+			t := time.Time(tmp)
 			if c.delta != "" {
 				dur, _ := time.ParseDuration(c.delta)
 				t = t.Round(dur)
@@ -176,11 +176,11 @@ func TestStringToDuration(test *testing.T) {
 		if err != nil {
 			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
 		} else {
-			if v != expected {
+			if time.Duration(v) != expected {
 				test.Error(fmt.Sprintf("Check failed for \"%s\":\n\t expected: %s,\n\t real:     %s",
 					c.query,
 					expected,
-					v))
+					time.Duration(v)))
 			}
 		}
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 func TestFindRRDFiles(test *testing.T) {
-	rrd, ok := NewTestRRD(test)
+	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
 		return
@@ -106,7 +106,7 @@ func TestFindRRDFiles(test *testing.T) {
 }
 
 func TestFindMetricsRecursive(test *testing.T) {
-	rrd, ok := NewTestRRD(test)
+	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
 		return
@@ -191,7 +191,7 @@ func TestFindMetricsRecursive(test *testing.T) {
 }
 
 func TestFindMetricsNonRecursive(test *testing.T) {
-	rrd, ok := NewTestRRD(test)
+	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
 		return

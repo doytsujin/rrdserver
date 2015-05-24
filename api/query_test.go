@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"regexp"
 	"sort"
@@ -13,45 +15,97 @@ import (
 	"time"
 )
 
-func Want(args ...interface{}) (res QueryResponseValues) {
-	res = make(QueryResponseValues, len(args)/2)
-	tz, _ := time.LoadLocation("Local")
-
-	for i := 0; i < len(args); i += 2 {
-		t, err := time.ParseInLocation("2006.01.02 15:04:05", args[i].(string), tz)
-		if err != nil {
-			log.Fatal(fmt.Sprintf("Error: incorrect time %v", args[i]))
-		}
-
-		switch n := args[i+1].(type) {
-		case float64:
-			res[t] = n
-
-		case float32:
-			res[t] = float64(n)
-
-		case int:
-			res[t] = float64(n)
-
-		case int32:
-			res[t] = float64(n)
-
-		case int64:
-			res[t] = float64(n)
-
-		default:
-			log.Fatal(fmt.Sprintf("can't convert '%v' (%T) to flaot64", args[i+1], args[i+1]))
-		}
-	}
-	return
+var cases = []struct {
+	get  string
+	post string
+	want string
+}{
+	{
+		`start=2000.01.02-00:59:59&end=2000.01.02-01:05:00&resolution=1s&metric=server1.net/interface-eth0/if_packets/rx&consolidation=AVERAGE`,
+		`{
+		"start":  		"2000.01.02 00:59:59",
+		"end":    		"2000.01.02 01:05:00",
+		"resolution":   "1s",
+		"queries": [{
+			"metric": "server1.net/interface-eth0/if_packets/rx",
+			"consolidation":"AVERAGE"
+		}]
+	}`,
+		`
+	2000.01.02-01:00:00  100
+	2000.01.02-01:01:00  110
+	2000.01.02-01:02:00  120
+	2000.01.02-01:03:00  130
+	2000.01.02-01:04:00  140
+	2000.01.02-01:05:00  150
+	`},
+	// ***********************************
+	{
+		`start=2000.01.02-00:59:59&end=2000.01.02-01:05:00&resolution=1s&metric=server1.net/interface-eth0/if_packets/rx&consolidation=AVERAGE&metric=server1.net/interface-eth0/if_packets/tx`,
+		`{
+		"start":  		"2000.01.02 00:59:59",
+		"end":    		"2000.01.02 01:05:00",
+		"resolution":   "1s",
+		"queries": [{
+			"metric": "server1.net/interface-eth0/if_packets/rx",
+			"consolidation":"AVERAGE"
+		},{
+			"metric": "server1.net/interface-eth0/if_packets/tx",
+			"consolidation":"AVERAGE"
+		}]
+	}`,
+		`
+	2000.01.02-01:00:00  100 320
+	2000.01.02-01:01:00  110 320
+	2000.01.02-01:02:00  120 340
+	2000.01.02-01:03:00  130 360
+	2000.01.02-01:04:00  140 380
+	2000.01.02-01:05:00  150 400
+	`},
+	// ***********************************
+	{
+		`start=2000.01.02-00:59:59&end=2000.01.02-01:05:00&resolution=1s&metric=server1.net/cpu-0/cpu-system/value&consolidation=AVERAGE`,
+		`{
+		"start":  		"2000.01.02 00:59:59",
+		"end":    		"2000.01.02 01:05:00",
+		"resolution":   "1s",
+		"queries": [{
+			"metric": "server1.net/cpu-0/cpu-system/value",
+			"consolidation":"AVERAGE"
+		}]
+	}`,
+		`
+	2000.01.02-01:00:00  0
+	2000.01.02-01:01:00  1
+	2000.01.02-01:02:00  2
+	2000.01.02-01:03:00  3
+	2000.01.02-01:04:00  4
+	2000.01.02-01:05:00  5
+	`},
+	// ***********************************
+	{
+		`start=2000.01.02-00:59:59&end=2000.01.02-01:05:00&resolution=1s&metric=server1.net/cpu-0/cpu-system&consolidation=AVERAGE`,
+		`{
+		"start":  		"2000.01.02 00:59:59",
+		"end":    		"2000.01.02 01:05:00",
+		"resolution":   "1s",
+		"queries": [{
+			"metric": "server1.net/cpu-0/cpu-system",
+			"consolidation":"AVERAGE"
+		}]
+	}`,
+		`
+	2000.01.02-01:00:00  0
+	2000.01.02-01:01:00  1
+	2000.01.02-01:02:00  2
+	2000.01.02-01:03:00  3
+	2000.01.02-01:04:00  4
+	2000.01.02-01:05:00  5
+	`},
+	// ***********************************
 }
 
-func TestQuery(test *testing.T) {
-	rrd, ok := NewTestRRD(test)
-	defer rrd.Clean()
-	if !ok {
-		return
-	}
+func createRRDFiles(rrd *TestRRD) {
 	//                                                                                   rx   tx
 	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 00:59:00", 100, 300)
 	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:00:00", 100, 320)
@@ -73,119 +127,178 @@ func TestQuery(test *testing.T) {
 	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:08:00", 8)
 	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:09:00", 9)
 	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:10:00", 10)
+}
 
-	api := NewAPI(rrd.Directory)
+func Want(args ...interface{}) (res QueryResponseValues) {
+	res = make(QueryResponseValues, len(args)/2)
+	tz, _ := time.LoadLocation("Local")
 
-	// ::::::::::::::::::::::::::::::::::::::::::
-	cases := []struct {
-		query string
-		want  string
-	}{
-		{`[
-		{"metric": "server1.net/interface-eth0/if_packets/rx",
-				"start":  		"2000.01.02 00:59:59",
-				"end":    		"2000.01.02 01:05:00",
-				"consolidation":"AVERAGE",
-				"resolution":   "1s"}
-		]`,
-			`
-		2000.01.02-01:00:00  100
-        2000.01.02-01:01:00  110
-        2000.01.02-01:02:00  120
-        2000.01.02-01:03:00  130
-        2000.01.02-01:04:00  140
-        2000.01.02-01:05:00  150
-        `},
+	for i := 0; i < len(args); i += 2 {
+		t, err := time.ParseInLocation("2006.01.02 15:04:05", args[i].(string), tz)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Error: incorrect time %v", args[i]))
+		}
 
-		{`[
-		{"metric": "server1.net/interface-eth0/if_packets/rx",
-				"start":  		"2000.01.02 00:59:59",
-				"end":    		"2000.01.02 01:05:00",
-				"consolidation":"AVERAGE",
-				"resolution":   "1s"},
-		{"metric": "server1.net/interface-eth0/if_packets/tx",
-				"start":  		"2000.01.02 00:59:59",
-				"end":    		"2000.01.02 01:05:00",
-				"consolidation":"AVERAGE",
-				"resolution":   "1s"}
-		]`,
-			`
-		2000.01.02-01:00:00  100 320
-        2000.01.02-01:01:00  110 320
-        2000.01.02-01:02:00  120 340
-        2000.01.02-01:03:00  130 360
-        2000.01.02-01:04:00  140 380
-        2000.01.02-01:05:00  150 400
-        `},
+		switch n := args[i+1].(type) {
+		case float64:
+			res[Time(t)] = n
 
-		{`[
-		{"metric": "server1.net/cpu-0/cpu-system/value",
-				"start":  		"2000.01.02 00:59:59",
-				"end":    		"2000.01.02 01:05:00",
-				"consolidation":"AVERAGE",
-				"resolution":   "1s"}
-		]`,
-			`
-        2000.01.02-01:00:00		0
-        2000.01.02-01:01:00		1
-        2000.01.02-01:02:00		2
-        2000.01.02-01:03:00		3
-        2000.01.02-01:04:00		4
-        2000.01.02-01:05:00		5
-        `},
+		case float32:
+			res[Time(t)] = float64(n)
 
-		{`[
-		{"metric": "server1.net/cpu-0/cpu-system",
-				"start":  		"2000.01.02 00:59:59",
-				"end":    		"2000.01.02 01:05:00",
-				"consolidation":"AVERAGE",
-				"resolution":   "1s"}
-		]`,
-			`
-        2000.01.02-01:00:00		0
-        2000.01.02-01:01:00		1
-        2000.01.02-01:02:00		2
-        2000.01.02-01:03:00		3
-        2000.01.02-01:04:00		4
-        2000.01.02-01:05:00		5
-        `},
+		case int:
+			res[Time(t)] = float64(n)
+
+		case int32:
+			res[Time(t)] = float64(n)
+
+		case int64:
+			res[Time(t)] = float64(n)
+
+		default:
+			log.Fatal(fmt.Sprintf("can't convert '%v' (%T) to flaot64", args[i+1], args[i+1]))
+		}
 	}
+	return
+}
+
+func TestQuery(test *testing.T) {
+	rrd, ok := NewTestRRD()
+	defer rrd.Clean()
+	if !ok {
+		return
+	}
+	createRRDFiles(rrd)
 
 	// ::::::::::::::::::::::::::::::::::::::::::
+	api := NewAPI(rrd.Directory)
 	for _, c := range cases {
 		var err error
 
-		req := []*QueryRequest{}
-		if err = json.Unmarshal([]byte(c.query), &req); err != nil {
-			log.Fatal(fmt.Sprintf("Incorrect query '%v': ", c.query, err))
+		req := QueryRequest{}
+		if err = json.Unmarshal([]byte(c.post), &req); err != nil {
+			log.Fatal(fmt.Sprintf("Incorrect query '%v':\nError: %v", c.post, err))
 		}
 
-		want := ParseWantTable(c.want, len(req))
+		want := ParseWantTable(c.want)
 
 		resp, err := api.query(req)
 		if err != nil {
-			test.Error(fmt.Sprintf("Query: %s\n Error: %v", c.query, err))
+			test.Error(fmt.Sprintf("Query: %s\n Error: %v", c.post, err))
 			continue
 		}
 
 		if len(resp) < 1 {
-			test.Error(fmt.Sprintf("Query: %s\n Empty result.", c.query))
+			test.Error(fmt.Sprintf("Query: %s\n Empty result.", c.post))
 			continue
 		}
 
 		for i, r := range resp {
 			if !reflect.DeepEqual(r.Values, want[i]) {
-				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v\n\n%v", c.query, req[i].Metric, PrintQueryResponseValues(r.Values, want[i])))
+				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v\n\n%v", c.post, req.Queries[i].Metric, PrintQueryResponseValues(r.Values, want[i])))
 			}
 		}
 	}
 }
 
-func ParseWantTable(table string, colCount int) []QueryResponseValues {
-	res := make([]QueryResponseValues, colCount)
-	for i := 0; i < colCount; i++ {
-		res[i] = QueryResponseValues{}
+func TestQueryPostHandler(test *testing.T) {
+	rrd, ok := NewTestRRD()
+	defer rrd.Clean()
+	if !ok {
+		return
 	}
+	createRRDFiles(rrd)
+
+	// ::::::::::::::::::::::::::::::::::::::::::
+	api := NewAPI(rrd.Directory)
+	for _, c := range cases {
+		var err error
+
+		want := ParseWantTable(c.want)
+
+		req, err := http.NewRequest("POST", "http://127.0.0.1", strings.NewReader(c.post))
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Incorrect query '%v':\nError: %v", c.post, err))
+		}
+
+		w := httptest.NewRecorder()
+		api.QueryPostHandler(w, req)
+		body := w.Body.String()
+
+		if w.Code != 200 {
+			test.Error(fmt.Sprintf("Query: %s\n HTTP Error: %v", c.post, body))
+			continue
+		}
+
+		resp := []QueryResponse{}
+		if err = json.Unmarshal([]byte(body), &resp); err != nil {
+			test.Error(fmt.Sprintf("Query: %s\nIncorrect response '%v':\nError: %v", c.post, body, err))
+			continue
+		}
+
+		if len(resp) < 1 {
+			test.Error(fmt.Sprintf("Query: %s\n Empty result.", c.post))
+			continue
+		}
+
+		for i, r := range resp {
+			if !reflect.DeepEqual(r.Values, want[i]) {
+				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v:%s\n\n%v", c.post, r.Metric, r.Consolidation.String(), PrintQueryResponseValues(r.Values, want[i])))
+			}
+		}
+	}
+}
+
+func TestQueryGetHandler(test *testing.T) {
+	rrd, ok := NewTestRRD()
+	defer rrd.Clean()
+	if !ok {
+		return
+	}
+	createRRDFiles(rrd)
+
+	// ::::::::::::::::::::::::::::::::::::::::::
+	api := NewAPI(rrd.Directory)
+	for _, c := range cases {
+		var err error
+
+		want := ParseWantTable(c.want)
+
+		req, err := http.NewRequest("GET", "http://127.0.0.1/api/v1/query?"+c.get, nil)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Incorrect query '%v':\nError: %v", c.get, err))
+		}
+
+		w := httptest.NewRecorder()
+		api.QueryGetHandler(w, req)
+		body := w.Body.String()
+
+		if w.Code != 200 {
+			test.Error(fmt.Sprintf("Query: %s\n HTTP Error: %v", c.get, body))
+			continue
+		}
+
+		resp := []QueryResponse{}
+		if err = json.Unmarshal([]byte(body), &resp); err != nil {
+			test.Error(fmt.Sprintf("Query: %s\nIncorrect response '%v':\nError: %v", c.get, body, err))
+			continue
+		}
+
+		if len(resp) < 1 {
+			test.Error(fmt.Sprintf("Query: %s\n Empty result.", c.get))
+			continue
+		}
+
+		for i, r := range resp {
+			if !reflect.DeepEqual(r.Values, want[i]) {
+				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v:%s\n\n%v", c.get, r.Metric, r.Consolidation.String(), PrintQueryResponseValues(r.Values, want[i])))
+			}
+		}
+	}
+}
+
+func ParseWantTable(table string) []QueryResponseValues {
+	res := []QueryResponseValues{}
 
 	for _, line := range strings.Split(table, "\n") {
 		line = strings.Trim(line, " \t")
@@ -203,6 +316,9 @@ func ParseWantTable(table string, colCount int) []QueryResponseValues {
 			log.Fatal(fmt.Sprintf("Incorrect start time '%v' in line '%v'", items[0], line))
 		}
 
+		for i := len(res); i < len(items); i++ {
+			res = append(res, QueryResponseValues{})
+		}
 		n := 0
 		for _, s := range items[1:] {
 			s = strings.Trim(s, " \t")
@@ -221,7 +337,7 @@ func ParseWantTable(table string, colCount int) []QueryResponseValues {
 	return res
 }
 
-type Keys []time.Time
+type Keys []Time
 
 func (keys Keys) Len() int {
 	return len(keys)
@@ -232,10 +348,10 @@ func (keys Keys) Swap(i, j int) {
 }
 
 func (keys Keys) Less(i, j int) bool {
-	return keys[i].Unix() < keys[j].Unix()
+	return time.Time(keys[i]).Unix() < time.Time(keys[j]).Unix()
 }
 
-func (keys Keys) indexOf(t time.Time) int {
+func (keys Keys) indexOf(t Time) int {
 	for n, k := range keys {
 		if k == t {
 			return n
@@ -277,7 +393,7 @@ func PrintQueryResponseValues(res, want QueryResponseValues) string {
 		if s1 != s2 {
 			s3 = " <==="
 		}
-		out += fmt.Sprintf(format, t, s1, s2, s3)
+		out += fmt.Sprintf(format, time.Time(t), s1, s2, s3)
 	}
 
 	return out

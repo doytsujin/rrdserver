@@ -60,5 +60,5 @@ func (c *Consolidation) UnmarshalJSON(data []byte) error {
 }
 
 func (c *Consolidation) MarshalJSON() ([]byte, error) {
-	return []byte(c.String()), nil
+	return []byte(`"` + c.String() + `"`), nil
 }
