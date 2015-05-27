@@ -280,8 +280,8 @@ func (api *API) query(queryReq QueryRequest) ([]QueryResponse, error) {
 					Start:         queryReq.Start,
 					End:           queryReq.End,
 					Resolution:    queryReq.Resolution,
-					Metric:        job.metric,
-					Consolidation: job.cons,
+					Metric:        j.metric,
+					Consolidation: j.cons,
 					Values:        make(QueryResponseValues, fetchRes.RowCnt),
 				}
 
