@@ -1,3 +1,5 @@
 *~
 *.autosave
 *.kate-swp
+.build
+
