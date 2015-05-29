@@ -22,8 +22,8 @@ func NewAPI(dataDir string) API {
 }
 
 func (api *API) Serve(router *mux.Router) {
-	router.Methods("GET").Path("/query").HandlerFunc(api.QueryGetHandler)
-	router.Methods("POST").Path("/query").HandlerFunc(api.QueryPostHandler)
+	router.Methods("GET").Path("/fetch").HandlerFunc(api.FetchGetHandler)
+	router.Methods("POST").Path("/fetch").HandlerFunc(api.FetchPostHandler)
 
 	router.Methods("GET").Path("/suggest/metrics").HandlerFunc(api.suggestMetricsGetHandler)
 	router.Methods("POST").Path("/suggest/metrics").HandlerFunc(api.suggestMetricsPostHandler)

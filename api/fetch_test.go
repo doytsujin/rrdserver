@@ -129,8 +129,8 @@ func createRRDFiles(rrd *TestRRD) {
 	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:10:00", 10)
 }
 
-func Want(args ...interface{}) (res QueryResponseValues) {
-	res = make(QueryResponseValues, len(args)/2)
+func Want(args ...interface{}) (res FetchResponseValues) {
+	res = make(FetchResponseValues, len(args)/2)
 	tz, _ := time.LoadLocation("Local")
 
 	for i := 0; i < len(args); i += 2 {
@@ -162,7 +162,7 @@ func Want(args ...interface{}) (res QueryResponseValues) {
 	return
 }
 
-func TestQuery(test *testing.T) {
+func TestFetch(test *testing.T) {
 	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
@@ -175,14 +175,14 @@ func TestQuery(test *testing.T) {
 	for _, c := range cases {
 		var err error
 
-		req := QueryRequest{}
+		req := FetchRequest{}
 		if err = json.Unmarshal([]byte(c.post), &req); err != nil {
 			log.Fatal(fmt.Sprintf("Incorrect query '%v':\nError: %v", c.post, err))
 		}
 
 		want := ParseWantTable(c.want)
 
-		resp, err := api.query(req)
+		resp, err := api.fetch(req)
 		if err != nil {
 			test.Error(fmt.Sprintf("Query: %s\n Error: %v", c.post, err))
 			continue
@@ -195,13 +195,13 @@ func TestQuery(test *testing.T) {
 
 		for i, r := range resp {
 			if !reflect.DeepEqual(r.Values, want[i]) {
-				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v\n\n%v", c.post, req.Queries[i].Metric, PrintQueryResponseValues(r.Values, want[i])))
+				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v\n\n%v", c.post, req.Queries[i].Metric, PrintFetchResponseValues(r.Values, want[i])))
 			}
 		}
 	}
 }
 
-func TestQueryPostHandler(test *testing.T) {
+func TestFetchPostHandler(test *testing.T) {
 	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
@@ -222,7 +222,7 @@ func TestQueryPostHandler(test *testing.T) {
 		}
 
 		w := httptest.NewRecorder()
-		api.QueryPostHandler(w, req)
+		api.FetchPostHandler(w, req)
 		body := w.Body.String()
 
 		if w.Code != 200 {
@@ -230,7 +230,7 @@ func TestQueryPostHandler(test *testing.T) {
 			continue
 		}
 
-		resp := []QueryResponse{}
+		resp := []FetchResponse{}
 		if err = json.Unmarshal([]byte(body), &resp); err != nil {
 			test.Error(fmt.Sprintf("Query: %s\nIncorrect response '%v':\nError: %v", c.post, body, err))
 			continue
@@ -243,13 +243,13 @@ func TestQueryPostHandler(test *testing.T) {
 
 		for i, r := range resp {
 			if !reflect.DeepEqual(r.Values, want[i]) {
-				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v:%s\n\n%v", c.post, r.Metric, r.Consolidation.String(), PrintQueryResponseValues(r.Values, want[i])))
+				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v:%s\n\n%v", c.post, r.Metric, r.Consolidation.String(), PrintFetchResponseValues(r.Values, want[i])))
 			}
 		}
 	}
 }
 
-func TestQueryGetHandler(test *testing.T) {
+func TestFetchGetHandler(test *testing.T) {
 	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
@@ -270,7 +270,7 @@ func TestQueryGetHandler(test *testing.T) {
 		}
 
 		w := httptest.NewRecorder()
-		api.QueryGetHandler(w, req)
+		api.FetchGetHandler(w, req)
 		body := w.Body.String()
 
 		if w.Code != 200 {
@@ -278,7 +278,7 @@ func TestQueryGetHandler(test *testing.T) {
 			continue
 		}
 
-		resp := []QueryResponse{}
+		resp := []FetchResponse{}
 		if err = json.Unmarshal([]byte(body), &resp); err != nil {
 			test.Error(fmt.Sprintf("Query: %s\nIncorrect response '%v':\nError: %v", c.get, body, err))
 			continue
@@ -291,14 +291,14 @@ func TestQueryGetHandler(test *testing.T) {
 
 		for i, r := range resp {
 			if !reflect.DeepEqual(r.Values, want[i]) {
-				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v:%s\n\n%v", c.get, r.Metric, r.Consolidation.String(), PrintQueryResponseValues(r.Values, want[i])))
+				test.Error(fmt.Sprintf("Query: %s\n\nMetric: %v:%s\n\n%v", c.get, r.Metric, r.Consolidation.String(), PrintFetchResponseValues(r.Values, want[i])))
 			}
 		}
 	}
 }
 
-func ParseWantTable(table string) []QueryResponseValues {
-	res := []QueryResponseValues{}
+func ParseWantTable(table string) []FetchResponseValues {
+	res := []FetchResponseValues{}
 
 	for _, line := range strings.Split(table, "\n") {
 		line = strings.Trim(line, " \t")
@@ -317,7 +317,7 @@ func ParseWantTable(table string) []QueryResponseValues {
 		}
 
 		for i := len(res); i < len(items); i++ {
-			res = append(res, QueryResponseValues{})
+			res = append(res, FetchResponseValues{})
 		}
 		n := 0
 		for _, s := range items[1:] {
@@ -361,7 +361,7 @@ func (keys Keys) indexOf(t Time) int {
 	return -1
 }
 
-func PrintQueryResponseValues(res, want QueryResponseValues) string {
+func PrintFetchResponseValues(res, want FetchResponseValues) string {
 	keys := make(Keys, len(res))
 	i := 0
 	for k := range res {
