@@ -1,0 +1,11 @@
+[Unit]
+Description=RRD statistics daemon
+After=local-fs.target network-online.target
+Requires=local-fs.target network-online.target
+
+[Service]
+ExecStart=/usr/local/sbin/rrdserver -c /etc/rrdserver.conf
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
