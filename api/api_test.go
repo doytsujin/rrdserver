@@ -4,10 +4,16 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
+	"testing"
 	"time"
 )
 
@@ -118,4 +124,111 @@ func comparePaths(s1, s2 []string) bool {
 	sort.Strings(s1)
 	sort.Strings(s2)
 	return fmt.Sprintf("%+v", s1) == fmt.Sprintf("%+v", s2)
+}
+
+func createRRDFiles(rrd *TestRRD) {
+	//                                                                                   rx   tx
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 00:59:00", 100, 300)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:00:00", 100, 320)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:01:00", 110, 320)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:02:00", 120, 340)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:03:00", 130, 360)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:04:00", 140, 380)
+	rrd.InsertValues("server1.net/interface-eth0/if_packets.rrd", "2000.01.02 01:05:00", 150, 400)
+
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 00:59:00", 0)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:00:00", 0)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:01:00", 1)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:02:00", 2)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:03:00", 3)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:04:00", 4)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:05:00", 5)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:06:00", 6)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:07:00", 7)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:08:00", 8)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:09:00", 9)
+	rrd.InsertValues("server1.net/cpu-0/cpu-system.rrd", "2000.01.02 01:10:00", 10)
+}
+
+func ParseWantTable(table string) []DataPoints {
+	res := []DataPoints{}
+
+	for _, line := range strings.Split(table, "\n") {
+		line = strings.Trim(line, " \t")
+		if line == "" {
+			continue
+		}
+
+		items := regexp.MustCompile("[ \t]+").Split(line, -1)
+		if len(items) < 0 {
+			log.Fatal(fmt.Sprintf("Incorrect table row '%v'", line))
+		}
+
+		t, err := TimeFromString(items[0])
+		if err != nil {
+			log.Fatal(fmt.Sprintf("Incorrect start time '%v' in line '%v'", items[0], line))
+		}
+
+		items = items[1:]
+		for i := len(res); i < len(items); i++ {
+			res = append(res, DataPoints{})
+		}
+		n := 0
+		for _, s := range items {
+			s = strings.Trim(s, " \t")
+			if s == "" {
+				continue
+			}
+
+			res[n][t], err = strconv.ParseFloat(s, 64)
+			if err != nil {
+				log.Fatal(fmt.Sprintf("Incorrect value '%v' in line '%v'", items[0], line))
+			}
+			n++
+		}
+	}
+
+	return res
+}
+
+func MakeGetRequest(t *testing.T, f http.HandlerFunc, query string) string {
+	if query != "" && !strings.HasPrefix(query, "?") {
+		query = "?" + query
+	}
+
+	req, err := http.NewRequest("GET", "http://127.0.0.1"+query, nil)
+
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Incorrect get query '%v':\nError: %v", query, err))
+	}
+
+	w := httptest.NewRecorder()
+	f(w, req)
+
+	body := w.Body.String()
+	if w.Code != 200 {
+		t.Errorf("Get query: '%s'\n HTTP Error: %v", query, body)
+		return ""
+	}
+
+	return body
+}
+
+func MakePostRequest(t *testing.T, f http.HandlerFunc, query string) string {
+	req, err := http.NewRequest("POST", "http://127.0.0.1", strings.NewReader(query))
+
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Incorrect post query '%v':\nError: %v", query, err))
+	}
+
+	w := httptest.NewRecorder()
+	f(w, req)
+
+	body := w.Body.String()
+	if w.Code != 200 {
+		t.Errorf("Post query: '%s'\n HTTP Error: %v", query, body)
+		return ""
+	}
+
+	return body
 }

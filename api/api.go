@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -22,11 +23,11 @@ func NewAPI(dataDir string) API {
 }
 
 func (api *API) Serve(router *mux.Router) {
-	router.Methods("GET").Path("/fetch").HandlerFunc(api.FetchGetHandler)
-	router.Methods("POST").Path("/fetch").HandlerFunc(api.FetchPostHandler)
+	router.Methods("GET").Path("/suggest/metrics").HandlerFunc(api.SuggestMetricsGetHandler)
+	router.Methods("POST").Path("/suggest/metrics").HandlerFunc(api.SuggestMetricsPostHandler)
 
-	router.Methods("GET").Path("/suggest/metrics").HandlerFunc(api.suggestMetricsGetHandler)
-	router.Methods("POST").Path("/suggest/metrics").HandlerFunc(api.suggestMetricsPostHandler)
+	router.Methods("GET").Path("/query").HandlerFunc(api.QueryGetHandler)
+	router.Methods("POST").Path("/query").HandlerFunc(api.QueryPostHandler)
 }
 
 func (api *API) CommonHeader(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +65,10 @@ func InternalServerError(w http.ResponseWriter, format string, args ...interface
 	srvError(w, http.StatusInternalServerError, format, args...)
 }
 
+func (api API) FileForMetric(metric string) string {
+	return api.DataDir + SafeMetric(metric) + ".rrd"
+}
+
 func SafeMetric(metric string) string {
 	res := strings.Replace(metric, "|", "", -1)
 	res = filepath.Clean("/" + res)
@@ -81,4 +86,18 @@ func isFile(fileName string) bool {
 func isDir(fileName string) bool {
 	fileInfo, err := os.Stat(fileName)
 	return err == nil && fileInfo.IsDir()
+}
+
+func Unquote(s string) (string, error) {
+	if len(s) < 2 {
+		return s, nil
+	}
+
+	switch s[:1] {
+	case "`", `"`:
+		return strconv.Unquote(s)
+
+	default:
+		return s, nil
+	}
 }

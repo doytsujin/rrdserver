@@ -14,7 +14,6 @@ func Serve() {
 	config := NewConfig()
 
 	router := mux.NewRouter()
-
 	router.Methods("OPTIONS").HandlerFunc(optionsHandler)
 	router.Path("/").HandlerFunc(indexHandler)
 	router.Path("/index.html").HandlerFunc(indexHandler)

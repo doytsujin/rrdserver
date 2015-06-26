@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -45,7 +44,7 @@ func ConsolidationFromString(s string) (Consolidation, error) {
 		return Consolidation(CFLAST), nil
 	}
 
-	return Consolidation(CFAVERAGE), errors.New(fmt.Sprintf("Invalid consolidation '%v'", s))
+	return Consolidation(CFAVERAGE), fmt.Errorf("Invalid consolidation '%v'", s)
 }
 
 func (c *Consolidation) UnmarshalJSON(data []byte) error {
@@ -56,7 +55,7 @@ func (c *Consolidation) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	return errors.New(fmt.Sprintf("Invalid consolidation '%v'", data))
+	return fmt.Errorf("Invalid consolidation '%v'", data)
 }
 
 func (c *Consolidation) MarshalJSON() ([]byte, error) {

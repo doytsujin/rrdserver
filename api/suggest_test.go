@@ -1,7 +1,8 @@
 package api
 
 import (
-	"fmt"
+	"encoding/json"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -84,9 +85,6 @@ func TestFindRRDFiles(test *testing.T) {
 
 		{"server1.net/interface-eth0/if_packets/",
 			Expected{dir + "server1.net/interface-eth0/if_packets.rrd"}},
-
-		{"server1.net/interface-eth0/if_packets/rx",
-			Expected{dir + "server1.net/interface-eth0/if_packets.rrd"}},
 	}
 
 	api := NewAPI(rrd.Directory)
@@ -97,198 +95,215 @@ func TestFindRRDFiles(test *testing.T) {
 		if !comparePaths(r, c.expected) {
 			sort.Strings(c.expected)
 			sort.Strings(r)
-			test.Error(fmt.Sprintf("Check failed for \"%s\":\nexpected:\n\t%+v\nreal:\n\t%+v",
+			test.Errorf("Check failed for \"%s\":\nexpected:\n\t%+v\nreal:\n\t%+v",
 				c.query,
 				strings.Join(c.expected, "\n\t"),
-				strings.Join(r, "\n\t")))
+				strings.Join(r, "\n\t"))
 		}
 	}
 }
 
-func TestFindMetricsRecursive(test *testing.T) {
+func TestSuggestMetricsHandler(test *testing.T) {
+	cases := []struct {
+		Get  string
+		Post string
+		Want string
+	}{
+		{
+			``,
+			``,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/cpu-1/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_octets",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_packets", "ds": ["rx", "tx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`""`,
+			``,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/cpu-1/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_octets",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_packets", "ds": ["rx", "tx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=`,
+			`{"query":""}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/cpu-1/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_octets",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_packets", "ds": ["rx", "tx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=&withds=true`,
+			`{"query":"", "withds":true}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/cpu-1/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_octets",  "ds": ["rx", "tx"]},
+			{"metric": "server1.net/interface-eth0/if_packets", "ds": ["rx", "tx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=&withds=false`,
+			`{"query":"", "withds":false}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": []},
+			{"metric": "server1.net/cpu-1/cpu-system", "ds": []},
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": []},
+			{"metric": "server1.net/interface-eth0/if_octets",  "ds": []},
+			{"metric": "server1.net/interface-eth0/if_packets", "ds": []}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/&withds=true`,
+			`{"query":"verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/", "withds":true}`,
+			`[]`,
+		},
+		// ***********************************
+		{
+			`?query=verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string&withds=true`,
+			`{"query":"verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string", "withds":true}`,
+			`[]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/interface-eth0/if_errors&withds=true`,
+			`{"query":"server1.net/interface-eth0/if_errors", "withds":true}`,
+			`[
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx", "tx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/interface-eth0/if_errors&withds=false`,
+			`{"query":"server1.net/interface-eth0/if_errors", "withds":false}`,
+			`[
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": []}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/interface-eth0/if_errors/&withds=true`,
+			`{"query":"server1.net/interface-eth0/if_errors/", "withds":true}`,
+			`[
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx", "tx"]}
+		 ]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/interface-eth0/if_errors:r&withds=true`,
+			`{"query":"server1.net/interface-eth0/if_errors:r", "withds":true}`,
+			`[
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/interface-eth0/if_errors:rx&withds=true`,
+			`{"query":"server1.net/interface-eth0/if_errors:rx", "withds":true}`,
+			`[
+			{"metric": "server1.net/interface-eth0/if_errors",  "ds": ["rx"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/interface-eth0/if_errors:rxn&withds=true`,
+			`{"query":"server1.net/interface-eth0/if_errors:rxn", "withds":true}`,
+			`[]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/cpu-&withds=true`,
+			`{"query":"server1.net/cpu-", "withds":true}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]},
+			{"metric": "server1.net/cpu-1/cpu-system", "ds": ["value"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/cpu-0&withds=true`,
+			`{"query":"server1.net/cpu-0", "withds":true}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/cpu-0/&withds=true`,
+			`{"query":"server1.net/cpu-0/", "withds":true}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/cpu-0/cpu-&withds=true`,
+			`{"query":"server1.net/cpu-0/cpu-", "withds":true}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]}
+		]`,
+		},
+		// ***********************************
+		{
+			`?query=server1.net/cpu-0/cpu-system&withds=true`,
+			`{"query":"server1.net/cpu-0/cpu-system", "withds":true}`,
+			`[
+			{"metric": "server1.net/cpu-0/cpu-system", "ds": ["value"]}
+		]`,
+		},
+		// ***********************************
+	}
+
 	rrd, ok := NewTestRRD()
 	defer rrd.Clean()
 	if !ok {
 		return
 	}
 
-	type Expected []string
-	cases := []struct {
-		query    string
-		expected Expected
-	}{
-		{"",
-			Expected{"server1.net/interface-eth0/if_errors/rx",
-				"server1.net/interface-eth0/if_errors/tx",
-				"server1.net/interface-eth0/if_octets/rx",
-				"server1.net/interface-eth0/if_octets/tx",
-				"server1.net/interface-eth0/if_packets/rx",
-				"server1.net/interface-eth0/if_packets/tx",
-				"server1.net/cpu-0/cpu-system",
-				"server1.net/cpu-1/cpu-system",
-			}},
-
-		{"verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/",
-			Expected{}},
-
-		{"verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string",
-			Expected{}},
-
-		{"server1.net/interface-eth0/if_errors",
-			Expected{"server1.net/interface-eth0/if_errors/rx",
-				"server1.net/interface-eth0/if_errors/tx",
-			}},
-
-		{"server1.net/interface-eth0/if_errors/",
-			Expected{"server1.net/interface-eth0/if_errors/rx",
-				"server1.net/interface-eth0/if_errors/tx",
-			}},
-
-		{"server1.net/interface-eth0/if_errors/r",
-			Expected{"server1.net/interface-eth0/if_errors/rx"}},
-
-		{"server1.net/interface-eth0/if_errors/rx",
-			Expected{"server1.net/interface-eth0/if_errors/rx"}},
-
-		{"server1.net/interface-eth0/if_errors/rxn",
-			Expected{}},
-
-		{"server1.net/cpu-",
-			Expected{"server1.net/cpu-0/cpu-system",
-				"server1.net/cpu-1/cpu-system"}},
-
-		{"server1.net/cpu-0",
-			Expected{"server1.net/cpu-0/cpu-system"}},
-
-		{"server1.net/cpu-0/",
-			Expected{"server1.net/cpu-0/cpu-system"}},
-
-		{"server1.net/cpu-0/cpu-",
-			Expected{"server1.net/cpu-0/cpu-system"}},
-
-		{"server1.net/cpu-0/cpu-system",
-			Expected{"server1.net/cpu-0/cpu-system"}},
-	}
-
 	api := NewAPI(rrd.Directory)
+
+	check := func(method string, query, wantJSON, respJSON string) {
+		want := SuggestMetricsResponse{}
+		resp := SuggestMetricsResponse{}
+
+		if err := json.Unmarshal([]byte(wantJSON), &want); err != nil {
+			test.Errorf("%v query: '%s'\nIncorrect want '%v':\nError: %v\n", method, query, want, err)
+			return
+		}
+
+		if err := json.Unmarshal([]byte(respJSON), &resp); err != nil {
+			test.Errorf("%v query: '%s'\nIncorrect response '%v':\nError: %v\n", method, query, respJSON, err)
+			return
+		}
+
+		if !reflect.DeepEqual(resp, want) {
+			test.Errorf("%v query: '%s'\n\nResult: %v\n\nWant:   %v\n", method, query, resp, want)
+		}
+	}
+
 	for _, c := range cases {
-
-		r, err := api.findMetricsRecursive(c.query)
-		if err != nil {
-			test.Error(fmt.Sprintf("Check failed for \"%s\":%v", err))
-			continue
-		}
-
-		if !comparePaths(r, c.expected) {
-			sort.Strings(c.expected)
-			sort.Strings(r)
-			test.Error(fmt.Sprintf("Check failed for recursive \"%s\":\nexpected:\n\t%+v\nreal:\n\t%+v\n",
-				c.query,
-				strings.Join(c.expected, "\n\t"),
-				strings.Join(r, "\n\t")))
-		}
-	}
-}
-
-func TestFindMetricsNonRecursive(test *testing.T) {
-	rrd, ok := NewTestRRD()
-	defer rrd.Clean()
-	if !ok {
-		return
+		j := MakePostRequest(test, api.SuggestMetricsPostHandler, c.Post)
+		check("POST", c.Post, c.Want, j)
 	}
 
-	type Expected []string
-	cases := []struct {
-		query    string
-		expected Expected
-	}{
-		{"",
-			Expected{"server1.net"}},
-
-		{"verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/",
-			Expected{}},
-
-		{"verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string/verry/long/string",
-			Expected{}},
-
-		{"s",
-			Expected{"server1.net"}},
-
-		{"server1.net/",
-			Expected{"interface-eth0",
-				"cpu-0",
-				"cpu-1",
-			}},
-
-		{"server1.net/interface-eth0/",
-			Expected{"if_errors",
-				"if_octets",
-				"if_packets",
-			}},
-
-		{"server1.net/interface-eth0/if_error",
-			Expected{"if_errors"}},
-
-		{"server1.net/interface-eth0/if_errors",
-			Expected{"if_errors"}},
-
-		{"server1.net/interface-eth0/if_errors/",
-			Expected{"rx",
-				"tx",
-			}},
-
-		{"server1.net/interface-eth0/if_errors/r",
-			Expected{"rx"}},
-
-		{"server1.net/interface-eth0/if_errors/rx",
-			Expected{"rx"}},
-
-		{"server1.net/interface-eth0/if_errors/rxn",
-			Expected{}},
-
-		{"server1.net/cpu-",
-			Expected{
-				"cpu-0",
-				"cpu-1",
-			}},
-
-		{"server1.net/cpu-1",
-			Expected{
-				"cpu-1",
-			}},
-
-		{"server1.net/cpu-0/",
-			Expected{"cpu-system"}},
-
-		{"server1.net/cpu-0/cpu-",
-			Expected{"cpu-system"}},
-
-		{"server1.net/cpu-0/cpu-system",
-			Expected{"cpu-system"}},
-
-		{"server1.net/cpu-0/cpu-systemZZZ",
-			Expected{""}},
-
-		{"server1.net/cpu-0/cpu-system/",
-			Expected{""}},
-	}
-
-	api := NewAPI(rrd.Directory)
 	for _, c := range cases {
-
-		r, err := api.findMetricsNonRecursive(c.query)
-		if err != nil {
-			test.Error(fmt.Sprintf("Check failed for \"%s\":%v", err))
-			continue
-		}
-
-		if !comparePaths(r, c.expected) {
-			sort.Strings(c.expected)
-			sort.Strings(r)
-			test.Error(fmt.Sprintf("Check failed for non recursive \"%s\":\nexpected:\n\t%+v\nreal:\n\t%+v\n",
-				c.query,
-				strings.Join(c.expected, "\n\t"),
-				strings.Join(r, "\n\t")))
-		}
+		j := MakeGetRequest(test, api.SuggestMetricsGetHandler, c.Get)
+		check("GET", c.Get, c.Want, j)
 	}
 }

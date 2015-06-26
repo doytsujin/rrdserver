@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"testing"
 	"time"
 )
@@ -90,7 +89,7 @@ func TestTimeFromString(test *testing.T) {
 	for _, c := range cases {
 		tmp, err := TimeFromString(c.query)
 		if err != nil {
-			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
+			test.Errorf("Check failed for \"%s\",\n%v", c.query, err)
 		} else {
 			t := time.Time(tmp)
 			if c.delta != "" {
@@ -100,10 +99,10 @@ func TestTimeFromString(test *testing.T) {
 			}
 
 			if t.UnixNano() != c.expected.UnixNano() {
-				test.Error(fmt.Sprintf("Check failed for \"%s\":\n\t expected: %s   (%s),\n\t real:     %s   (%s)",
+				test.Errorf("Check failed for \"%s\":\n\t expected: %s   (%s),\n\t real:     %s   (%s)",
 					c.query,
 					c.expected.Local(), c.expected.UTC(),
-					t.Local(), t.UTC()))
+					t.Local(), t.UTC())
 			}
 		}
 	}
@@ -138,7 +137,7 @@ func TestUnmarshalJSON(test *testing.T) {
 		t := time.Time(v)
 
 		if err != nil {
-			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
+			test.Errorf("Check failed for \"%s\",\n%v", c.query, err)
 		} else {
 			if c.delta != "" {
 				dur, _ := time.ParseDuration(c.delta)
@@ -147,10 +146,10 @@ func TestUnmarshalJSON(test *testing.T) {
 			}
 
 			if t.UnixNano() != c.expected.UnixNano() {
-				test.Error(fmt.Sprintf("Check failed for \"%s\":\n\t expected: %s   (%s),\n\t real:     %s   (%s)",
+				test.Errorf("Check failed for \"%s\":\n\t expected: %s   (%s),\n\t real:     %s   (%s)",
 					c.query,
 					c.expected.Local(), c.expected.UTC(),
-					t.Local(), t.UTC()))
+					t.Local(), t.UTC())
 			}
 		}
 	}
@@ -174,13 +173,13 @@ func TestStringToDuration(test *testing.T) {
 		expected, _ := time.ParseDuration(c.expected)
 		v, err := DurationFromString(c.query)
 		if err != nil {
-			test.Error(fmt.Sprintf("Check failed for \"%s\",\n%v", c.query, err))
+			test.Errorf("Check failed for \"%s\",\n%v", c.query, err)
 		} else {
 			if time.Duration(v) != expected {
-				test.Error(fmt.Sprintf("Check failed for \"%s\":\n\t expected: %s,\n\t real:     %s",
+				test.Errorf("Check failed for \"%s\":\n\t expected: %s,\n\t real:     %s",
 					c.query,
 					expected,
-					time.Duration(v)))
+					time.Duration(v))
 			}
 		}
 	}

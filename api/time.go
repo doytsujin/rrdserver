@@ -15,6 +15,34 @@ func (t Time) Unix() int64 {
 	return time.Time(t).Unix()
 }
 
+func CheckStartEndTime(start, end *Time, defaultStart, defaultEnd time.Time) error {
+	s, e := time.Time(*start), time.Time(*end)
+
+	if s.IsZero() {
+		s = defaultStart
+	}
+
+	if e.IsZero() {
+		e = defaultEnd
+	}
+
+	if s.IsZero() {
+		return errors.New("Missing parameter 'start' in the request.")
+	}
+
+	if e.IsZero() {
+		return errors.New("Missing parameter 'end' in the request.")
+	}
+
+	if e.Before(s) {
+		return errors.New("Parameter 'end' should be grater then 'start'")
+	}
+
+	*start = Time(s)
+	*end = Time(e)
+	return nil
+}
+
 func (t *Time) UnmarshalJSON(data []byte) error {
 	var err error
 	var n int64
@@ -29,11 +57,11 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	return errors.New(fmt.Sprintf("Incorrect time string '%v'", data))
+	return fmt.Errorf("Incorrect time string '%v'", data)
 }
 
-func (t *Time) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`"%v"`, time.Time(*t).Unix())), nil
+func (t Time) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%v"`, time.Time(t).Unix())), nil
 }
 
 func TimeFromString(str string) (Time, error) {
@@ -46,12 +74,12 @@ func TimeFromString(str string) (Time, error) {
 
 	res = Time(time.Now())
 
-	if d, err := time.ParseDuration(str); err != nil {
-		return Time{}, errors.New(fmt.Sprintf("Incorrect time string '%v': %s\n", str, err))
-	} else {
-		res = Time(time.Time(res).Add(d))
+	d, err := time.ParseDuration(str); 
+	if err != nil {
+		return Time{}, fmt.Errorf("Incorrect time string '%v': %s\n", str, err)
 	}
 
+	res = Time(time.Time(res).Add(d))
 	return res, nil
 }
 
@@ -140,10 +168,14 @@ func parseAbsTime(s string) (Time, error) {
 		}
 	}
 
-	return Time{}, errors.New(fmt.Sprintf("Incorrect date string '%v'", s))
+	return Time{}, fmt.Errorf("Incorrect date string '%v'", s)
 }
 
 type Duration time.Duration
+
+func (d Duration) Seconds() float64 {
+	return time.Duration(d).Seconds()
+}
 
 func DurationFromString(s string) (Duration, error) {
 	if s == "" {
@@ -173,9 +205,9 @@ func (d *Duration) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	return errors.New(fmt.Sprintf("Invalid duration string '%v'", data))
+	return fmt.Errorf("Invalid duration string '%v'", data)
 }
 
-func (d *Duration) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`%v`, time.Duration(*d).Seconds())), nil
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`%v`, time.Duration(d).Seconds())), nil
 }
